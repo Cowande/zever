@@ -1,286 +1,152 @@
-<!doctype html>
-<html lang="nl">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Zever - Demo site</title>
+<meta charset="UTF-8">
+<title>Public Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body{font-family:Arial,Helvetica,sans-serif;background:#f6f9f4;margin:0;}
-  header{background:#0b6; padding:14px;color:#041;font-weight:700;text-align:center}
-  main{padding:18px;max-width:1000px;margin:18px auto}
-  .btn{display:inline-block;background:#0b6;color:white;padding:10px 14px;border-radius:6px;text-decoration:none;margin:6px}
-  .muted{color:#444}
-  .layout{display:flex;gap:16px;flex-wrap:wrap}
-  .card{background:white;border-radius:8px;padding:12px;box-shadow:0 2px 6px rgba(0,0,0,0.08);flex:1 1 300px}
-  #adminPanel{display:none}
-  table{width:100%;border-collapse:collapse}
-  th,td{padding:6px;border-bottom:1px solid #eee;font-size:13px}
-  #cookieModal{position:fixed;left:0;right:0;bottom:10px;margin:auto;background:#fffbe6;padding:14px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.12);width:calc(100% - 40px);max-width:800px}
-  #overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none}
-  .danger{background:#d9534f}
-  input,button{font-family:inherit}
-  .small{font-size:13px;color:#666}
-  pre{white-space:pre-wrap;background:#f3f3f3;padding:8px;border-radius:6px;overflow:auto}
+body { font-family: Arial; margin: 0; padding: 0; background:#101015; color:white; }
+#chat, #admin { display:none; padding:20px; }
+input, button { padding:10px; margin:5px; border-radius:5px; }
+#messages { background:#181a20; padding:10px; height:300px; overflow-y:auto; border:1px solid #555; }
+.log-row { font-size:12px; border-bottom:1px solid #333; padding:4px 0; }
+a { color:#4da3ff; cursor:pointer; }
 </style>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
+
 <body>
 
-<header>Zever — Demo (single-file site)</header>
+<div style="padding:10px;background:#1e1e2e;display:flex;justify-content:space-between;">
+<b>🌐 Public Chat</b>
+<a onclick="showAdminLogin()">Admin</a>
+</div>
 
-<main>
-  <div class="layout">
-    <div class="card">
-      <h2>Welkom</h2>
-      <p class="muted">Deze pagina demonstreert simpele login, visitor logging en webcam-toegang.
-         Lees de waarschuwing en gebruik verantwoord.</p>
+<div id="chat">
+<h2>Public Chat</h2>
+<div>
+<input id="name" placeholder="Naam">
+</div>
+<div id="messages"></div>
+<input id="msg" placeholder="Typ bericht...">
+<button onclick="sendMsg()">Verstuur</button>
+</div>
 
-      <div style="margin-top:12px">
-        <button id="loginBtn" class="btn">Login (owner)</button>
-        <button id="viewBtn" class="btn" disabled>Open camera (vereist cookie)</button>
-        <button id="showLogsBtn" class="btn" style="display:none">Admin: Bekijk logs</button>
-        <button id="downloadBtn" class="btn" style="display:none">Admin: Download logs</button>
-      </div>
+<div id="adminLogin" style="display:none;padding:20px;">
+<h2>Admin Login</h2>
+<input id="adminPass" type="password" placeholder="Wachtwoord">
+<button onclick="adminAuth()">Login</button>
+</div>
 
-      <hr/>
-
-      <div id="cameraArea" style="margin-top:12px"></div>
-    </div>
-
-    <div class="card" id="siteInfo">
-      <h3>Site status</h3>
-      <p class="small">Cookie toegestaan: <span id="cookieState">nee</span></p>
-      <p class="small">Laatste bezoeker IP: <span id="lastIP">-</span></p>
-      <p class="small">Logs lokaal opgeslagen: <span id="logCount">0</span></p>
-      <hr/>
-      <p class="small">Note: camera toegang vraagt altijd toestemming aan de gebruiker.</p>
-    </div>
-  </div>
-
-  <div id="adminPanel" class="card" style="margin-top:14px">
-    <h3>Admin panel — bezoekers logs</h3>
-    <p class="small">Alleen zichtbaar als je als owner bent ingelogd.</p>
-    <div style="margin-top:8px;overflow:auto;max-height:360px;">
-      <table id="logTable"><thead><tr><th>Tijd</th><th>IP</th><th>UserAgent</th><th>Screen</th><th>Info</th></tr></thead><tbody></tbody></table>
-    </div>
-  </div>
-</main>
-
-<!-- cookie consent modal -->
-<div id="overlay"></div>
-<div id="cookieModal" aria-hidden="true" style="display:none">
-  <p><strong>Cookies & toestemming</strong></p>
-  <p class="small">Wij vragen je toestemming voor cookies en (optioneel) camera-toegang. 
-    Accepteer om door te gaan. Deze demo logt IP & device info voor de eigenaar.</p>
-  <div style="margin-top:8px">
-    <button id="acceptCookies" class="btn">Accepteer cookies</button>
-    <button id="declineCookies" class="btn danger">Weiger</button>
-  </div>
+<div id="admin">
+<h2>Admin Paneel</h2>
+<button onclick="downloadLogs()">Download logs</button>
+<div id="logs"></div>
 </div>
 
 <script>
-/*
-  SINGLE-FILE SITE - Visitor logging + simple admin + camera toggle
-  IMPORTANT:
-  - Configure WEBHOOK_URL if you want logs sent to a remote collector (optional)
-  - Configure OWNER_USERNAME and OWNER_PASSWORD below (insecure, stored in client)
-*/
+// ——————————————————————————
+// ✅ FIREBASE INITIALIZATIE
+// ——————————————————————————
 
-const WEBHOOK_URL = ""; // optioneel: plak hier jouw webhook.site of andere endpoint om logs heen te sturen
-const OWNER_USERNAME = "admin";      // verander dit naar jouw gewenste ownernaam
-const OWNER_PASSWORD = "wachtwoord"; // verander dit naar jouw gewenste wachtwoord
+const firebaseConfig = {
+  // TODO: VUL HIER JOUW FIREBASE CONFIG IN
+  apiKey: "...",
+  authDomain: "...",
+  databaseURL: "https://zever-7eca0-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "zever-7eca0",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "P..."
+};
 
-// helper: local storage keys
-const LS_COOKIE_KEY = "zever_cookie_ok";
-const LS_LOGS_KEY = "zever_logs_v1";
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-// elements
-const cookieModal = document.getElementById("cookieModal");
-const overlay = document.getElementById("overlay");
-const acceptBtn = document.getElementById("acceptCookies");
-const declineBtn = document.getElementById("declineCookies");
-const cookieStateEl = document.getElementById("cookieState");
-const lastIPEl = document.getElementById("lastIP");
-const logCountEl = document.getElementById("logCount");
 
-const loginBtn = document.getElementById("loginBtn");
-const viewBtn = document.getElementById("viewBtn");
-const showLogsBtn = document.getElementById("showLogsBtn");
-const adminPanel = document.getElementById("adminPanel");
-const logTableBody = document.querySelector("#logTable tbody");
-const downloadBtn = document.getElementById("downloadBtn");
-const cameraArea = document.getElementById("cameraArea");
-
-// state
-let cookieOK = (localStorage.getItem(LS_COOKIE_KEY) === "1");
-let logs = JSON.parse(localStorage.getItem(LS_LOGS_KEY) || "[]");
-updateUI();
-
-function updateUI(){
-  cookieStateEl.textContent = cookieOK? "ja":"nee";
-  logCountEl.textContent = logs.length;
-  lastIPEl.textContent = logs.length? (logs[logs.length-1].ip || "-") : "-";
+// ——————————————————————————
+// ✅ SIMULATED "IP" (veilig, geen privacy schending)
+// ——————————————————————————
+let fakeIP = localStorage.getItem("fakeIP");
+if (!fakeIP) {
+    fakeIP = "User-" + Math.floor(Math.random()*999999);
+    localStorage.setItem("fakeIP", fakeIP);
 }
 
-// show cookie modal if not accepted
-function showCookieModal(){
-  overlay.style.display = "block";
-  cookieModal.style.display = "block";
-}
-function hideCookieModal(){
-  overlay.style.display = "none";
-  cookieModal.style.display = "none";
+// ——————————————————————————
+// ✅ USER VISIT LOG
+// ——————————————————————————
+const visit = {
+    user: fakeIP,
+    time: new Date().toLocaleString(),
+    agent: navigator.userAgent
+};
+db.ref("logs").push(visit);
+
+// ——————————————————————————
+// ✅ CHAT SYSTEM
+// ——————————————————————————
+function sendMsg(){
+    const name = document.getElementById("name").value;
+    const msg = document.getElementById("msg").value;
+    if(!name || !msg) return;
+
+    db.ref("messages").push({
+        name, msg, time: new Date().toLocaleTimeString()
+    });
+
+    document.getElementById("msg").value = "";
 }
 
-if(!cookieOK){
-  showCookieModal();
-} else {
-  viewBtn.disabled = false;
-  // if cookie ok, automatically log this visit
-  recordVisit();
-}
-
-// handlers
-acceptBtn.addEventListener("click", ()=>{
-  localStorage.setItem(LS_COOKIE_KEY,"1");
-  cookieOK = true;
-  updateUI();
-  hideCookieModal();
-  viewBtn.disabled = false;
-  recordVisit();
-});
-declineBtn.addEventListener("click", ()=>{
-  localStorage.setItem(LS_COOKIE_KEY,"0");
-  cookieOK = false;
-  updateUI();
-  hideCookieModal();
-  viewBtn.disabled = true;
+db.ref("messages").on("child_added", snap=>{
+    const d = snap.val();
+    document.getElementById("messages").innerHTML +=
+        `<div><b>${d.name}:</b> ${d.msg} <span style="opacity:.5;font-size:10px;">(${d.time})</span></div>`;
 });
 
-// login (very simple)
-loginBtn.addEventListener("click", ()=>{
-  const user = prompt("Username:");
-  if(user===null) return;
-  const pass = prompt("Password:");
-  if(pass===null) return;
-  if(user === OWNER_USERNAME && pass === OWNER_PASSWORD){
-    alert("Succesvol ingelogd als owner");
-    showAdmin();
-  } else {
-    alert("Verkeerde inloggegevens");
-  }
-});
-
-function showAdmin(){
-  adminPanel.style.display = "block";
-  showLogsBtn.style.display = "inline-block";
-  downloadBtn.style.display = "inline-block";
-  populateLogTable();
+// ——————————————————————————
+// ✅ ADMIN PANEL
+// ——————————————————————————
+function showAdminLogin() {
+    document.getElementById("adminLogin").style.display = "block";
 }
 
-// populate table from local logs
-function populateLogTable(){
-  logTableBody.innerHTML = "";
-  logs.slice().reverse().forEach(entry=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML = "<td>"+escapeHtml(entry.time)+"</td>"
-                 + "<td>"+escapeHtml(entry.ip || '-')+"</td>"
-                 + "<td><small>"+escapeHtml(entry.ua)+"</small></td>"
-                 + "<td>"+escapeHtml(entry.screen)+"</td>"
-                 + "<td><small>"+escapeHtml(JSON.stringify(entry.extra||{}))+"</small></td>";
-    logTableBody.appendChild(tr);
-  });
-}
-
-// download logs
-downloadBtn.addEventListener("click", ()=>{
-  const dataStr = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(logs, null, 2));
-  const a = document.createElement("a");
-  a.href = dataStr;
-  a.download = "visitor_logs.json";
-  a.click();
-});
-
-// camera logic
-let stream = null;
-viewBtn.addEventListener("click", async ()=>{
-  if(!cookieOK){
-    alert("Je moet cookies accepteren voordat je de camera kan gebruiken.");
-    showCookieModal();
-    return;
-  }
-  if(stream){
-    // stop
-    stream.getTracks().forEach(t=>t.stop());
-    stream = null;
-    cameraArea.innerHTML = "";
-    viewBtn.textContent = "Open camera (vereist cookie)";
-    return;
-  }
-  try{
-    stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-    const video = document.createElement("video");
-    video.autoplay = true;
-    video.playsInline = true;
-    video.srcObject = stream;
-    video.style.width = "100%";
-    video.style.maxWidth = "480px";
-    cameraArea.innerHTML = "";
-    cameraArea.appendChild(video);
-    viewBtn.textContent = "Stop camera";
-  }catch(err){
-    alert("Camera toegang mislukt of geweigerd: " + err.message);
-  }
-});
-
-// record visit: gathers info and saves locally, optionally POSTs to WEBHOOK_URL
-async function recordVisit(){
-  if(!cookieOK) return;
-  const entry = { time: new Date().toISOString(), ua: navigator.userAgent, screen: screen.width+"x"+screen.height, extra:{} };
-  // try to fetch public IP from ipify
-  try {
-    const r = await fetch("https://api.ipify.org?format=json");
-    if(r.ok){
-      const j = await r.json();
-      entry.ip = j.ip;
+function adminAuth(){
+    const pass = document.getElementById("adminPass").value;
+    if(pass === "admin123"){   // change this later!
+        document.getElementById("adminLogin").style.display="none";
+        document.getElementById("admin").style.display="block";
+        loadLogs();
+    } else {
+        alert("Fout wachtwoord");
     }
-  } catch(e) {
-    entry.ip = "unknown";
-  }
-  // add more info
-  entry.extra.platform = navigator.platform || "";
-  entry.extra.lang = navigator.language || "";
-  entry.extra.url = location.href;
-  logs.push(entry);
-  // keep logs reasonable size
-  if(logs.length > 1000) logs = logs.slice(-1000);
-  localStorage.setItem(LS_LOGS_KEY, JSON.stringify(logs));
-  updateUI();
-  // send to remote webhook if configured
-  if(WEBHOOK_URL && WEBHOOK_URL.length>10){
-    try {
-      fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(entry)
-      });
-    } catch(e){
-      console.warn("Webhook POST failed", e);
-    }
-  }
 }
 
-// small helper for safety
-function escapeHtml(s){ if(!s) return ""; return s.toString().replace(/[&<>"']/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
-
-// auto-populate admin if logged in via local flag - (optional)
-// You can set a simple "owner logged in" localStorage flag to avoid entering password every time (insecure)
-if(localStorage.getItem("__zever_owner_logged") === "1"){
-  showAdmin();
+function loadLogs(){
+    db.ref("logs").once("value", snap=>{
+        let html = "";
+        snap.forEach(x=>{
+            const d = x.val();
+            html += `<div class="log-row">👤 ${d.user} — ${d.time}<br><span style="opacity:.5;">${d.agent}</span></div>`;
+        });
+        document.getElementById("logs").innerHTML = html;
+    });
 }
 
-// expose showAdmin to console for quick access (dev)
-window.__zever_showAdmin = showAdmin;
+function downloadLogs(){
+    db.ref("logs").once("value", snap=>{
+        const data = JSON.stringify(snap.val(),null,2);
+        const blob = new Blob([data], {type:"application/json"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "logs.json";
+        a.click();
+    });
+}
 
+// show chat by default
+document.getElementById("chat").style.display="block";
 </script>
 </body>
 </html>
