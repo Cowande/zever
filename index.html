@@ -3,283 +3,284 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Zever — basic site met login & visitor logging</title>
+<title>Zever - Demo site</title>
 <style>
-  body{font-family:Arial,Helvetica,sans-serif;background:#f6fff2;color:#111;margin:0}
-  header{background:#2f8f4a;color:#fff;padding:16px;text-align:center}
-  main{padding:18px;max-width:1000px;margin:20px auto}
-  .btn{display:inline-block;padding:8px 12px;background:#1b5e20;color:#fff;border-radius:6px;text-decoration:none;margin:6px}
-  .small{font-size:13px;color:#333}
-  .card{background:#fff;padding:14px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.08);margin:12px 0}
+  body{font-family:Arial,Helvetica,sans-serif;background:#f6f9f4;margin:0;}
+  header{background:#0b6; padding:14px;color:#041;font-weight:700;text-align:center}
+  main{padding:18px;max-width:1000px;margin:18px auto}
+  .btn{display:inline-block;background:#0b6;color:white;padding:10px 14px;border-radius:6px;text-decoration:none;margin:6px}
+  .muted{color:#444}
+  .layout{display:flex;gap:16px;flex-wrap:wrap}
+  .card{background:white;border-radius:8px;padding:12px;box-shadow:0 2px 6px rgba(0,0,0,0.08);flex:1 1 300px}
   #adminPanel{display:none}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
-  input[type="password"]{padding:8px;border-radius:6px;border:1px solid #ccc}
-  .danger{background:#b71c1c}
-  footer{padding:12px;text-align:center;color:#666;font-size:13px}
-  .note{font-size:13px;color:#555}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:6px;border-bottom:1px solid #eee;font-size:13px}
+  #cookieModal{position:fixed;left:0;right:0;bottom:10px;margin:auto;background:#fffbe6;padding:14px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.12);width:calc(100% - 40px);max-width:800px}
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none}
+  .danger{background:#d9534f}
+  input,button{font-family:inherit}
+  .small{font-size:13px;color:#666}
+  pre{white-space:pre-wrap;background:#f3f3f3;padding:8px;border-radius:6px;overflow:auto}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Zever — demo site</h1>
-  <div class="small">Eenvoudige demo: bezoek-log + admin tab (1 bestand)</div>
-</header>
+<header>Zever — Demo (single-file site)</header>
 
 <main>
-  <div class="card">
-    <h2>Welkom</h2>
-    <p class="note">Deze site registreert bezoekers (tijd, apparaat, IP). Alleen jij ziet de admin-tab na inloggen.</p>
-    <div>
-      <a class="btn" href="#" onclick="showHome()">Home</a>
-      <a class="btn" href="#" onclick="showAdminLogin()">Admin</a>
-      <a class="btn" href="#" id="clearLocalBtn" onclick="clearLocal()">Clear local logs</a>
+  <div class="layout">
+    <div class="card">
+      <h2>Welkom</h2>
+      <p class="muted">Deze pagina demonstreert simpele login, visitor logging en webcam-toegang.
+         Lees de waarschuwing en gebruik verantwoord.</p>
+
+      <div style="margin-top:12px">
+        <button id="loginBtn" class="btn">Login (owner)</button>
+        <button id="viewBtn" class="btn" disabled>Open camera (vereist cookie)</button>
+        <button id="showLogsBtn" class="btn" style="display:none">Admin: Bekijk logs</button>
+        <button id="downloadBtn" class="btn" style="display:none">Admin: Download logs</button>
+      </div>
+
+      <hr/>
+
+      <div id="cameraArea" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card" id="siteInfo">
+      <h3>Site status</h3>
+      <p class="small">Cookie toegestaan: <span id="cookieState">nee</span></p>
+      <p class="small">Laatste bezoeker IP: <span id="lastIP">-</span></p>
+      <p class="small">Logs lokaal opgeslagen: <span id="logCount">0</span></p>
+      <hr/>
+      <p class="small">Note: camera toegang vraagt altijd toestemming aan de gebruiker.</p>
     </div>
   </div>
 
-  <section id="home" class="card">
-    <h3>Home</h3>
-    <p>Deze pagina is de publieke pagina die iedereen ziet.</p>
-    <p class="small">Je kunt dit bestand aanpassen. Gaat naar GitHub Pages om te publiceren.</p>
-  </section>
-
-  <section id="adminLogin" class="card" style="display:none">
-    <h3>Admin login</h3>
-    <p><label>Wachtwoord: <input type="password" id="adminPass"></label>
-    <button class="btn" onclick="tryLogin()">Login</button></p>
-    <p class="note">Admin wachtwoord staat in het bestand; verander het in de code (variabele ADMIN_PASS).</p>
-  </section>
-
-  <section id="adminPanel" class="card">
-    <h3>Admin paneel</h3>
-    <p class="note">Alle bezoekers (remote via Firebase indien geconfigureerd) of lokaal (fallback) worden hier getoond.</p>
-
-    <div style="margin:10px 0">
-      <button class="btn" onclick="refreshLogs()">Refresh</button>
-      <button class="btn" onclick="downloadLogs()">Download CSV</button>
-      <button class="btn danger" onclick="wipeLogs()">Wipe all logs (local or remote)</button>
+  <div id="adminPanel" class="card" style="margin-top:14px">
+    <h3>Admin panel — bezoekers logs</h3>
+    <p class="small">Alleen zichtbaar als je als owner bent ingelogd.</p>
+    <div style="margin-top:8px;overflow:auto;max-height:360px;">
+      <table id="logTable"><thead><tr><th>Tijd</th><th>IP</th><th>UserAgent</th><th>Screen</th><th>Info</th></tr></thead><tbody></tbody></table>
     </div>
-
-    <div id="logsContainer" class="card" style="padding:8px;overflow:auto;max-height:360px">
-      <table id="logsTable">
-        <thead><tr><th>Tijd (UTC)</th><th>IP</th><th>User-Agent</th><th>Source</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-  </section>
+  </div>
 </main>
 
-<footer>
-  <div class="small">Demo — niet productieklaar. Gebruik verantwoordelijk.</div>
-</footer>
+<!-- cookie consent modal -->
+<div id="overlay"></div>
+<div id="cookieModal" aria-hidden="true" style="display:none">
+  <p><strong>Cookies & toestemming</strong></p>
+  <p class="small">Wij vragen je toestemming voor cookies en (optioneel) camera-toegang. 
+    Accepteer om door te gaan. Deze demo logt IP & device info voor de eigenaar.</p>
+  <div style="margin-top:8px">
+    <button id="acceptCookies" class="btn">Accepteer cookies</button>
+    <button id="declineCookies" class="btn danger">Weiger</button>
+  </div>
+</div>
 
 <script>
-/* ------------------ CONFIGURATION ------------------
- * Zet hier je admin wachtwoord. Dit staat in de HTML: niet veilig.
- * Als je Firebase logs wilt gebruiken: vul firebaseConfig hieronder en zet USE_FIREBASE = true.
- */
-const ADMIN_PASS = "change_this_password"; // <- verander dit
-const USE_FIREBASE = false; // true = stuur logs naar Firebase (volg instructies verderop)
-const FIREBASE_CONFIG = {
-  // voorbeeld (leeg): kopieer je eigen Firebase config object hier als je USE_FIREBASE=true
-  // apiKey: "...", authDomain: "...", databaseURL: "...", projectId: "...", storageBucket: "...",
-  // messagingSenderId: "...", appId: "..."
-};
+/*
+  SINGLE-FILE SITE - Visitor logging + simple admin + camera toggle
+  IMPORTANT:
+  - Configure WEBHOOK_URL if you want logs sent to a remote collector (optional)
+  - Configure OWNER_USERNAME and OWNER_PASSWORD below (insecure, stored in client)
+*/
 
-/* ------------------ einde config ------------------ */
+const WEBHOOK_URL = ""; // optioneel: plak hier jouw webhook.site of andere endpoint om logs heen te sturen
+const OWNER_USERNAME = "admin";      // verander dit naar jouw gewenste ownernaam
+const OWNER_PASSWORD = "wachtwoord"; // verander dit naar jouw gewenste wachtwoord
 
-let logs = []; // local cache of logs
-let isAdmin = false;
+// helper: local storage keys
+const LS_COOKIE_KEY = "zever_cookie_ok";
+const LS_LOGS_KEY = "zever_logs_v1";
 
-// helper uuid
-function uid(len=10){
-  return Date.now().toString(36) + Math.random().toString(36).substring(2,2+len);
+// elements
+const cookieModal = document.getElementById("cookieModal");
+const overlay = document.getElementById("overlay");
+const acceptBtn = document.getElementById("acceptCookies");
+const declineBtn = document.getElementById("declineCookies");
+const cookieStateEl = document.getElementById("cookieState");
+const lastIPEl = document.getElementById("lastIP");
+const logCountEl = document.getElementById("logCount");
+
+const loginBtn = document.getElementById("loginBtn");
+const viewBtn = document.getElementById("viewBtn");
+const showLogsBtn = document.getElementById("showLogsBtn");
+const adminPanel = document.getElementById("adminPanel");
+const logTableBody = document.querySelector("#logTable tbody");
+const downloadBtn = document.getElementById("downloadBtn");
+const cameraArea = document.getElementById("cameraArea");
+
+// state
+let cookieOK = (localStorage.getItem(LS_COOKIE_KEY) === "1");
+let logs = JSON.parse(localStorage.getItem(LS_LOGS_KEY) || "[]");
+updateUI();
+
+function updateUI(){
+  cookieStateEl.textContent = cookieOK? "ja":"nee";
+  logCountEl.textContent = logs.length;
+  lastIPEl.textContent = logs.length? (logs[logs.length-1].ip || "-") : "-";
 }
 
-/* visitor logging: build a record and push to storage (firebase or localStorage) */
-async function registerVisit(){
-  const rec = {
-    id: uid(6),
-    time: new Date().toISOString(),
-    ua: navigator.userAgent || "",
-    ip: "",
-    source: "local" // will be overwritten to 'firebase' if pushed there
-  };
+// show cookie modal if not accepted
+function showCookieModal(){
+  overlay.style.display = "block";
+  cookieModal.style.display = "block";
+}
+function hideCookieModal(){
+  overlay.style.display = "none";
+  cookieModal.style.display = "none";
+}
 
-  // try to fetch public IP (may fail due to CORS or network)
+if(!cookieOK){
+  showCookieModal();
+} else {
+  viewBtn.disabled = false;
+  // if cookie ok, automatically log this visit
+  recordVisit();
+}
+
+// handlers
+acceptBtn.addEventListener("click", ()=>{
+  localStorage.setItem(LS_COOKIE_KEY,"1");
+  cookieOK = true;
+  updateUI();
+  hideCookieModal();
+  viewBtn.disabled = false;
+  recordVisit();
+});
+declineBtn.addEventListener("click", ()=>{
+  localStorage.setItem(LS_COOKIE_KEY,"0");
+  cookieOK = false;
+  updateUI();
+  hideCookieModal();
+  viewBtn.disabled = true;
+});
+
+// login (very simple)
+loginBtn.addEventListener("click", ()=>{
+  const user = prompt("Username:");
+  if(user===null) return;
+  const pass = prompt("Password:");
+  if(pass===null) return;
+  if(user === OWNER_USERNAME && pass === OWNER_PASSWORD){
+    alert("Succesvol ingelogd als owner");
+    showAdmin();
+  } else {
+    alert("Verkeerde inloggegevens");
+  }
+});
+
+function showAdmin(){
+  adminPanel.style.display = "block";
+  showLogsBtn.style.display = "inline-block";
+  downloadBtn.style.display = "inline-block";
+  populateLogTable();
+}
+
+// populate table from local logs
+function populateLogTable(){
+  logTableBody.innerHTML = "";
+  logs.slice().reverse().forEach(entry=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML = "<td>"+escapeHtml(entry.time)+"</td>"
+                 + "<td>"+escapeHtml(entry.ip || '-')+"</td>"
+                 + "<td><small>"+escapeHtml(entry.ua)+"</small></td>"
+                 + "<td>"+escapeHtml(entry.screen)+"</td>"
+                 + "<td><small>"+escapeHtml(JSON.stringify(entry.extra||{}))+"</small></td>";
+    logTableBody.appendChild(tr);
+  });
+}
+
+// download logs
+downloadBtn.addEventListener("click", ()=>{
+  const dataStr = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(logs, null, 2));
+  const a = document.createElement("a");
+  a.href = dataStr;
+  a.download = "visitor_logs.json";
+  a.click();
+});
+
+// camera logic
+let stream = null;
+viewBtn.addEventListener("click", async ()=>{
+  if(!cookieOK){
+    alert("Je moet cookies accepteren voordat je de camera kan gebruiken.");
+    showCookieModal();
+    return;
+  }
+  if(stream){
+    // stop
+    stream.getTracks().forEach(t=>t.stop());
+    stream = null;
+    cameraArea.innerHTML = "";
+    viewBtn.textContent = "Open camera (vereist cookie)";
+    return;
+  }
   try{
-    const r = await fetch('https://api.ipify.org?format=json');
+    stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    const video = document.createElement("video");
+    video.autoplay = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    video.style.width = "100%";
+    video.style.maxWidth = "480px";
+    cameraArea.innerHTML = "";
+    cameraArea.appendChild(video);
+    viewBtn.textContent = "Stop camera";
+  }catch(err){
+    alert("Camera toegang mislukt of geweigerd: " + err.message);
+  }
+});
+
+// record visit: gathers info and saves locally, optionally POSTs to WEBHOOK_URL
+async function recordVisit(){
+  if(!cookieOK) return;
+  const entry = { time: new Date().toISOString(), ua: navigator.userAgent, screen: screen.width+"x"+screen.height, extra:{} };
+  // try to fetch public IP from ipify
+  try {
+    const r = await fetch("https://api.ipify.org?format=json");
     if(r.ok){
       const j = await r.json();
-      rec.ip = j.ip || "";
+      entry.ip = j.ip;
     }
-  }catch(e){
-    // ignore
+  } catch(e) {
+    entry.ip = "unknown";
   }
-
-  if(USE_FIREBASE && typeof firebase !== 'undefined' && firebase.database){
-    try{
-      const db = firebase.database();
-      const ref = db.ref('visitors');
-      const newRef = ref.push();
-      await newRef.set(rec);
-      rec.source = 'firebase';
-    }catch(e){
-      console.warn('Firebase push failed', e);
-      rec.source = 'local';
-      saveLocalRecord(rec);
-    }
-  } else {
-    saveLocalRecord(rec);
-  }
-
-  console.log('visit registered', rec);
-}
-
-function saveLocalRecord(rec){
-  // read from localStorage
-  let a = JSON.parse(localStorage.getItem('visitor_logs') || '[]');
-  a.push(rec);
-  localStorage.setItem('visitor_logs', JSON.stringify(a));
-  logs = a;
-}
-
-// Admin functions
-function showHome(){ document.getElementById('home').style.display='block'; document.getElementById('adminLogin').style.display='none'; document.getElementById('adminPanel').style.display='none'; }
-function showAdminLogin(){ document.getElementById('home').style.display='none'; document.getElementById('adminLogin').style.display='block'; document.getElementById('adminPanel').style.display='none'; }
-function showAdminPanel(){ document.getElementById('home').style.display='none'; document.getElementById('adminLogin').style.display='none'; document.getElementById('adminPanel').style.display='block'; }
-
-function tryLogin(){
-  const pw = document.getElementById('adminPass').value;
-  if(pw === ADMIN_PASS){
-    isAdmin = true;
-    showAdminPanel();
-    refreshLogs();
-  } else {
-    alert('Onjuist wachtwoord');
-  }
-}
-
-function getLocalLogs(){
-  return JSON.parse(localStorage.getItem('visitor_logs')||'[]');
-}
-
-async function getFirebaseLogs(){
-  if(typeof firebase === 'undefined' || !firebase.database) return [];
-  const db = firebase.database();
-  const snap = await db.ref('visitors').once('value');
-  const obj = snap.val() || {};
-  const arr = Object.keys(obj).map(k => obj[k]);
-  return arr;
-}
-
-async function refreshLogs(){
-  let combined = [];
-  if(USE_FIREBASE && typeof firebase !== 'undefined'){
-    try{
-      const f = await getFirebaseLogs();
-      combined = combined.concat(f);
-    }catch(e){
-      console.warn('get firebase failed', e);
+  // add more info
+  entry.extra.platform = navigator.platform || "";
+  entry.extra.lang = navigator.language || "";
+  entry.extra.url = location.href;
+  logs.push(entry);
+  // keep logs reasonable size
+  if(logs.length > 1000) logs = logs.slice(-1000);
+  localStorage.setItem(LS_LOGS_KEY, JSON.stringify(logs));
+  updateUI();
+  // send to remote webhook if configured
+  if(WEBHOOK_URL && WEBHOOK_URL.length>10){
+    try {
+      fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(entry)
+      });
+    } catch(e){
+      console.warn("Webhook POST failed", e);
     }
   }
-  combined = combined.concat(getLocalLogs());
-  // sort by time desc
-  combined.sort((a,b)=> (b.time||'').localeCompare(a.time||''));
-  logs = combined;
-  renderLogs();
 }
 
-function renderLogs(){
-  const tbody = document.querySelector('#logsTable tbody');
-  tbody.innerHTML = '';
-  logs.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(r.time||'')}</td><td>${escapeHtml(r.ip||'')}</td><td style="max-width:360px;overflow:hidden">${escapeHtml(r.ua||'')}</td><td>${escapeHtml(r.source||'')}</td>`;
-    tbody.appendChild(tr);
-  });
+// small helper for safety
+function escapeHtml(s){ if(!s) return ""; return s.toString().replace(/[&<>"']/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
+
+// auto-populate admin if logged in via local flag - (optional)
+// You can set a simple "owner logged in" localStorage flag to avoid entering password every time (insecure)
+if(localStorage.getItem("__zever_owner_logged") === "1"){
+  showAdmin();
 }
 
-// export CSV
-function downloadLogs(){
-  if(!isAdmin){ alert('Login als admin'); return; }
-  if(!logs || logs.length===0){ alert('Geen logs'); return; }
-  let csv = 'time,ip,userAgent,source\n';
-  logs.forEach(r=>{
-    csv += `${(r.time||'')},${(r.ip||'')},${(r.ua||'').replace(/,/g,';')},${(r.source||'')}\n`;
-  });
-  const blob = new Blob([csv], {type:'text/csv'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'visitor_logs.csv'; document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-}
+// expose showAdmin to console for quick access (dev)
+window.__zever_showAdmin = showAdmin;
 
-// wipe logs
-async function wipeLogs(){
-  if(!confirm('Weet je zeker? Verwijdert alle lokale logs (en remote als geconfigureerd).')) return;
-  localStorage.removeItem('visitor_logs');
-  if(USE_FIREBASE && typeof firebase !== 'undefined'){
-    try{
-      await firebase.database().ref('visitors').remove();
-    }catch(e){ console.warn(e) }
-  }
-  logs = [];
-  renderLogs();
-}
-
-// clear local only (quick)
-function clearLocal(){
-  if(confirm('Verwijder lokale logs op deze browser?')){ localStorage.removeItem('visitor_logs'); alert('Local logs verwijderd.'); }
-}
-
-/* tiny escape helper */
-function escapeHtml(s){ if(!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-/* CSV helper above, etc. */
-
-/* ------------------ OPTIONAL: Firebase init ------------------
- If you want to centralize logs, create a free Firebase project:
- 1) Go to https://console.firebase.google.com/ and create project
- 2) Under "Build" choose Realtime Database, create database, start in test mode (open)
- 3) In Project Settings -> Your apps -> add a web app -> copy the config object
- 4) Paste the config into FIREBASE_CONFIG at top and set USE_FIREBASE = true
- The script below will initialize Firebase and log visits there.
-*/
-async function initFirebaseIfNeeded(){
-  if(!USE_FIREBASE) return;
-  if(!FIREBASE_CONFIG || !FIREBASE_CONFIG.apiKey){ console.warn('Firebase config missing'); return; }
-
-  // load firebase scripts dynamically
-  if(typeof firebase === 'undefined'){
-    await loadScript('https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js');
-    await loadScript('https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js');
-  }
-  try{
-    firebase.initializeApp(FIREBASE_CONFIG);
-    console.log('firebase init ok');
-  }catch(e){
-    console.warn('firebase init failed', e);
-  }
-}
-
-function loadScript(src){
-  return new Promise((resolve, reject)=>{
-    const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
-/* ------------------ start ------------------ */
-(async function(){
-  showHome();
-  await initFirebaseIfNeeded();
-  await registerVisit();
-})();
 </script>
-
 </body>
 </html>
