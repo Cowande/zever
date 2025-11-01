@@ -1,152 +1,651 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
-<meta charset="UTF-8">
-<title>Public Chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body { font-family: Arial; margin: 0; padding: 0; background:#101015; color:white; }
-#chat, #admin { display:none; padding:20px; }
-input, button { padding:10px; margin:5px; border-radius:5px; }
-#messages { background:#181a20; padding:10px; height:300px; overflow-y:auto; border:1px solid #555; }
-.log-row { font-size:12px; border-bottom:1px solid #333; padding:4px 0; }
-a { color:#4da3ff; cursor:pointer; }
-</style>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Arena</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #ui h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #4ecca3;
+        }
+        
+        #playerInfo {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .infoBox {
+            background: rgba(30, 30, 60, 0.8);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border-left: 3px solid #4ecca3;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 400px;
+        }
+        
+        #instructions h3 {
+            color: #4ecca3;
+            margin-bottom: 8px;
+        }
+        
+        #instructions p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        #waitingMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.85);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 5;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(78, 204, 163, 0.3);
+            box-shadow: 0 0 30px rgba(78, 204, 163, 0.2);
+        }
+        
+        #waitingMessage h2 {
+            color: #4ecca3;
+            margin-bottom: 15px;
+            font-size: 28px;
+        }
+        
+        #waitingMessage p {
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        
+        #shareLink {
+            background: rgba(30, 30, 60, 0.8);
+            padding: 10px;
+            border-radius: 6px;
+            margin: 15px 0;
+            word-break: break-all;
+            border: 1px solid rgba(78, 204, 163, 0.3);
+        }
+        
+        .blood {
+            position: absolute;
+            pointer-events: none;
+            z-index: 2;
+        }
+        
+        .bullet {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #ffeb3b;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #ff9800;
+            pointer-events: none;
+            z-index: 2;
+        }
+        
+        .player {
+            position: absolute;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            z-index: 3;
+            transition: transform 0.1s;
+        }
+        
+        .player.local {
+            box-shadow: 0 0 15px #4ecca3;
+        }
+        
+        .player.remote {
+            box-shadow: 0 0 10px #2196F3;
+        }
+        
+        .player-name {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        
+        .respawn-animation {
+            animation: respawn 1.5s ease-out;
+        }
+        
+        @keyframes respawn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .hit-effect {
+            animation: hit 0.3s ease-out;
+        }
+        
+        @keyframes hit {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+    </style>
 </head>
-
 <body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui">
+            <h1>Multiplayer Arena</h1>
+            <div id="playerInfo">
+                <div class="infoBox">
+                    <div id="playerCount">Spelers: 1</div>
+                </div>
+                <div class="infoBox">
+                    <div id="kills">Eliminaties: 0</div>
+                </div>
+                <div class="infoBox">
+                    <div id="deaths">Overlijden: 0</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="instructions">
+            <h3>Besturing</h3>
+            <p>Bewegen: WASD of Pijltjestoetsen</p>
+            <p>Schieten: Klik met muis of Spatiebalk</p>
+            <p>Richting: Volgt muispositie</p>
+        </div>
+        
+        <div id="waitingMessage">
+            <h2>Wachten op Spelers</h2>
+            <p>Deel deze link met anderen om het spel te joinen:</p>
+            <div id="shareLink"></div>
+            <p>Je bent momenteel de enige speler in de arena.</p>
+        </div>
+    </div>
 
-<div style="padding:10px;background:#1e1e2e;display:flex;justify-content:space-between;">
-<b>🌐 Public Chat</b>
-<a onclick="showAdminLogin()">Admin</a>
-</div>
+    <script>
+        // Game state
+        const gameState = {
+            players: {},
+            localPlayerId: null,
+            bullets: [],
+            bloodEffects: [],
+            keys: {},
+            mouse: { x: 0, y: 0 },
+            stats: { kills: 0, deaths: 0 }
+        };
 
-<div id="chat">
-<h2>Public Chat</h2>
-<div>
-<input id="name" placeholder="Naam">
-</div>
-<div id="messages"></div>
-<input id="msg" placeholder="Typ bericht...">
-<button onclick="sendMsg()">Verstuur</button>
-</div>
+        // Game elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const playerCountElement = document.getElementById('playerCount');
+        const killsElement = document.getElementById('kills');
+        const deathsElement = document.getElementById('deaths');
+        const waitingMessageElement = document.getElementById('waitingMessage');
+        const shareLinkElement = document.getElementById('shareLink');
 
-<div id="adminLogin" style="display:none;padding:20px;">
-<h2>Admin Login</h2>
-<input id="adminPass" type="password" placeholder="Wachtwoord">
-<button onclick="adminAuth()">Login</button>
-</div>
+        // Canvas setup
+        function setupCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
 
-<div id="admin">
-<h2>Admin Paneel</h2>
-<button onclick="downloadLogs()">Download logs</button>
-<div id="logs"></div>
-</div>
+        // Show current URL for sharing
+        shareLinkElement.textContent = window.location.href;
 
-<script>
-// ——————————————————————————
-// ✅ FIREBASE INITIALIZATIE
-// ——————————————————————————
+        // Generate a unique ID for this player
+        function generatePlayerId() {
+            return 'player-' + Math.random().toString(36).substr(2, 9);
+        }
 
-const firebaseConfig = {
-  // TODO: VUL HIER JOUW FIREBASE CONFIG IN
-  apiKey: "...",
-  authDomain: "...",
-  databaseURL: "https://zever-7eca0-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "zever-7eca0",
-  storageBucket: "...",
-  messagingSenderId: "...",
-  appId: "P..."
-};
+        // Generate a random player name
+        function generatePlayerName() {
+            const names = ['Warrior', 'Knight', 'Ranger', 'Mage', 'Rogue', 'Paladin', 'Ninja', 'Samurai', 'Viking', 'Gladiator'];
+            const adjectives = ['Swift', 'Brave', 'Mighty', 'Stealthy', 'Fierce', 'Noble', 'Savage', 'Valiant', 'Deadly', 'Epic'];
+            return adjectives[Math.floor(Math.random() * adjectives.length)] + ' ' + names[Math.floor(Math.random() * names.length)];
+        }
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+        // Create a player
+        function createPlayer(playerId, isLocal = false) {
+            const name = generatePlayerName();
+            const size = isLocal ? 35 : 30;
+            
+            gameState.players[playerId] = {
+                id: playerId,
+                x: Math.random() * (canvas.width - size),
+                y: Math.random() * (canvas.height - size),
+                size: size,
+                color: isLocal ? '#4ecca3' : '#2196F3',
+                name: name,
+                speed: isLocal ? 5 : 4,
+                isLocal: isLocal,
+                health: 100,
+                lastShot: 0,
+                shootCooldown: 300, // ms
+                respawning: false
+            };
+            
+            updatePlayerCount();
+            
+            // Hide waiting message if there are players
+            if (Object.keys(gameState.players).length > 0) {
+                waitingMessageElement.style.display = 'none';
+            }
+        }
 
+        // Remove a player
+        function removePlayer(playerId) {
+            delete gameState.players[playerId];
+            updatePlayerCount();
+            
+            // Show waiting message if only local player remains
+            if (Object.keys(gameState.players).length <= 1) {
+                waitingMessageElement.style.display = 'block';
+            }
+        }
 
-// ——————————————————————————
-// ✅ SIMULATED "IP" (veilig, geen privacy schending)
-// ——————————————————————————
-let fakeIP = localStorage.getItem("fakeIP");
-if (!fakeIP) {
-    fakeIP = "User-" + Math.floor(Math.random()*999999);
-    localStorage.setItem("fakeIP", fakeIP);
-}
+        // Update player count display
+        function updatePlayerCount() {
+            const count = Object.keys(gameState.players).length;
+            playerCountElement.textContent = `Spelers: ${count}`;
+        }
 
-// ——————————————————————————
-// ✅ USER VISIT LOG
-// ——————————————————————————
-const visit = {
-    user: fakeIP,
-    time: new Date().toLocaleString(),
-    agent: navigator.userAgent
-};
-db.ref("logs").push(visit);
+        // Update stats display
+        function updateStats() {
+            killsElement.textContent = `Eliminaties: ${gameState.stats.kills}`;
+            deathsElement.textContent = `Overlijden: ${gameState.stats.deaths}`;
+        }
 
-// ——————————————————————————
-// ✅ CHAT SYSTEM
-// ——————————————————————————
-function sendMsg(){
-    const name = document.getElementById("name").value;
-    const msg = document.getElementById("msg").value;
-    if(!name || !msg) return;
+        // Initialize local player
+        function initLocalPlayer() {
+            gameState.localPlayerId = generatePlayerId();
+            createPlayer(gameState.localPlayerId, true);
+            
+            // Add event listeners
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+            canvas.addEventListener('mousemove', handleMouseMove);
+            canvas.addEventListener('click', handleShoot);
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    handleShoot();
+                    e.preventDefault();
+                }
+            });
+            
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
 
-    db.ref("messages").push({
-        name, msg, time: new Date().toLocaleTimeString()
-    });
+        // Handle keyboard input
+        function handleKeyDown(e) {
+            gameState.keys[e.key.toLowerCase()] = true;
+        }
 
-    document.getElementById("msg").value = "";
-}
+        function handleKeyUp(e) {
+            gameState.keys[e.key.toLowerCase()] = false;
+        }
 
-db.ref("messages").on("child_added", snap=>{
-    const d = snap.val();
-    document.getElementById("messages").innerHTML +=
-        `<div><b>${d.name}:</b> ${d.msg} <span style="opacity:.5;font-size:10px;">(${d.time})</span></div>`;
-});
+        // Handle mouse movement
+        function handleMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            gameState.mouse.x = e.clientX - rect.left;
+            gameState.mouse.y = e.clientY - rect.top;
+        }
 
-// ——————————————————————————
-// ✅ ADMIN PANEL
-// ——————————————————————————
-function showAdminLogin() {
-    document.getElementById("adminLogin").style.display = "block";
-}
+        // Handle shooting
+        function handleShoot() {
+            const player = gameState.players[gameState.localPlayerId];
+            if (!player || player.respawning) return;
+            
+            const now = Date.now();
+            if (now - player.lastShot < player.shootCooldown) return;
+            
+            player.lastShot = now;
+            
+            // Calculate direction towards mouse
+            const angle = Math.atan2(
+                gameState.mouse.y - (player.y + player.size/2),
+                gameState.mouse.x - (player.x + player.size/2)
+            );
+            
+            // Create bullet
+            const bulletSpeed = 12;
+            gameState.bullets.push({
+                x: player.x + player.size/2,
+                y: player.y + player.size/2,
+                vx: Math.cos(angle) * bulletSpeed,
+                vy: Math.sin(angle) * bulletSpeed,
+                owner: player.id,
+                lifetime: 1000 // ms
+            });
+        }
 
-function adminAuth(){
-    const pass = document.getElementById("adminPass").value;
-    if(pass === "admin123"){   // change this later!
-        document.getElementById("adminLogin").style.display="none";
-        document.getElementById("admin").style.display="block";
-        loadLogs();
-    } else {
-        alert("Fout wachtwoord");
-    }
-}
+        // Update game state
+        function update() {
+            // Update local player movement
+            const player = gameState.players[gameState.localPlayerId];
+            if (player && !player.respawning) {
+                let dx = 0, dy = 0;
+                
+                if (gameState.keys['w'] || gameState.keys['arrowup']) dy -= 1;
+                if (gameState.keys['s'] || gameState.keys['arrowdown']) dy += 1;
+                if (gameState.keys['a'] || gameState.keys['arrowleft']) dx -= 1;
+                if (gameState.keys['d'] || gameState.keys['arrowright']) dx += 1;
+                
+                // Normalize diagonal movement
+                if (dx !== 0 && dy !== 0) {
+                    dx *= 0.707;
+                    dy *= 0.707;
+                }
+                
+                player.x += dx * player.speed;
+                player.y += dy * player.speed;
+                
+                // Boundary checking
+                player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+                player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+            }
+            
+            // Update bullets
+            for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+                const bullet = gameState.bullets[i];
+                bullet.x += bullet.vx;
+                bullet.y += bullet.vy;
+                bullet.lifetime -= 16; // ~60fps
+                
+                // Remove bullets that are out of bounds or expired
+                if (bullet.x < 0 || bullet.x > canvas.width || 
+                    bullet.y < 0 || bullet.y > canvas.height ||
+                    bullet.lifetime <= 0) {
+                    gameState.bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for collisions with players
+                for (const playerId in gameState.players) {
+                    const p = gameState.players[playerId];
+                    if (p.id === bullet.owner) continue; // Can't shoot yourself
+                    
+                    const dx = bullet.x - (p.x + p.size/2);
+                    const dy = bullet.y - (p.y + p.size/2);
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < p.size/2) {
+                        // Hit!
+                        if (bullet.owner === gameState.localPlayerId) {
+                            gameState.stats.kills++;
+                            updateStats();
+                        }
+                        
+                        if (p.id === gameState.localPlayerId) {
+                            gameState.stats.deaths++;
+                            updateStats();
+                            respawnPlayer(p.id);
+                        } else {
+                            removePlayer(p.id);
+                        }
+                        
+                        // Create blood effect
+                        createBloodEffect(bullet.x, bullet.y);
+                        
+                        // Remove bullet
+                        gameState.bullets.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+            
+            // Update blood effects
+            for (let i = gameState.bloodEffects.length - 1; i >= 0; i--) {
+                gameState.bloodEffects[i].lifetime -= 16;
+                if (gameState.bloodEffects[i].lifetime <= 0) {
+                    gameState.bloodEffects.splice(i, 1);
+                }
+            }
+        }
 
-function loadLogs(){
-    db.ref("logs").once("value", snap=>{
-        let html = "";
-        snap.forEach(x=>{
-            const d = x.val();
-            html += `<div class="log-row">👤 ${d.user} — ${d.time}<br><span style="opacity:.5;">${d.agent}</span></div>`;
+        // Respawn a player
+        function respawnPlayer(playerId) {
+            const player = gameState.players[playerId];
+            if (!player) return;
+            
+            player.respawning = true;
+            player.health = 100;
+            
+            setTimeout(() => {
+                player.x = Math.random() * (canvas.width - player.size);
+                player.y = Math.random() * (canvas.height - player.size);
+                player.respawning = false;
+            }, 2000);
+        }
+
+        // Create blood effect
+        function createBloodEffect(x, y) {
+            gameState.bloodEffects.push({
+                x: x,
+                y: y,
+                size: Math.random() * 20 + 10,
+                color: '#8a0303',
+                lifetime: 1000
+            });
+        }
+
+        // Render game
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = 'rgba(26, 26, 46, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid
+            drawGrid();
+            
+            // Draw blood effects
+            gameState.bloodEffects.forEach(blood => {
+                const alpha = blood.lifetime / 1000;
+                ctx.fillStyle = `rgba(138, 3, 3, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(blood.x, blood.y, blood.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw blood splatter
+                for (let i = 0; i < 5; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = Math.random() * blood.size;
+                    const splatterX = blood.x + Math.cos(angle) * distance;
+                    const splatterY = blood.y + Math.sin(angle) * distance;
+                    const splatterSize = Math.random() * blood.size / 3;
+                    
+                    ctx.beginPath();
+                    ctx.arc(splatterX, splatterY, splatterSize, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+            
+            // Draw bullets
+            gameState.bullets.forEach(bullet => {
+                ctx.fillStyle = '#ffeb3b';
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw bullet trail
+                ctx.strokeStyle = 'rgba(255, 235, 59, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(bullet.x - bullet.vx, bullet.y - bullet.vy);
+                ctx.lineTo(bullet.x, bullet.y);
+                ctx.stroke();
+            });
+            
+            // Draw players
+            for (const playerId in gameState.players) {
+                const player = gameState.players[playerId];
+                
+                if (player.respawning) {
+                    // Draw respawn effect
+                    const progress = 1 - (player.respawning ? 0.5 : 1);
+                    ctx.fillStyle = `rgba(78, 204, 163, ${progress})`;
+                    ctx.beginPath();
+                    ctx.arc(player.x + player.size/2, player.y + player.size/2, player.size/2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Draw respawn text
+                    ctx.fillStyle = 'white';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('RESPAWNING...', player.x + player.size/2, player.y + player.size/2);
+                } else {
+                    // Draw player
+                    ctx.fillStyle = player.color;
+                    ctx.beginPath();
+                    ctx.arc(player.x + player.size/2, player.y + player.size/2, player.size/2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Draw player name
+                    ctx.fillStyle = 'white';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(player.name, player.x + player.size/2, player.y - 10);
+                    
+                    // Draw health bar
+                    const barWidth = player.size;
+                    const barHeight = 4;
+                    const barX = player.x + (player.size - barWidth) / 2;
+                    const barY = player.y - 15;
+                    
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    ctx.fillRect(barX, barY, barWidth, barHeight);
+                    
+                    ctx.fillStyle = player.isLocal ? '#4ecca3' : '#2196F3';
+                    ctx.fillRect(barX, barY, barWidth * (player.health / 100), barHeight);
+                    
+                    // Draw direction indicator for local player
+                    if (player.isLocal) {
+                        const angle = Math.atan2(
+                            gameState.mouse.y - (player.y + player.size/2),
+                            gameState.mouse.x - (player.x + player.size/2)
+                        );
+                        
+                        const indicatorLength = player.size / 2 + 5;
+                        const endX = player.x + player.size/2 + Math.cos(angle) * indicatorLength;
+                        const endY = player.y + player.size/2 + Math.sin(angle) * indicatorLength;
+                        
+                        ctx.strokeStyle = 'white';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(player.x + player.size/2, player.y + player.size/2);
+                        ctx.lineTo(endX, endY);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        // Draw background grid
+        function drawGrid() {
+            const gridSize = 50;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            
+            // Vertical lines
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            // Horizontal lines
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize the game when the page loads
+        window.addEventListener('load', () => {
+            setupCanvas();
+            initLocalPlayer();
         });
-        document.getElementById("logs").innerHTML = html;
-    });
-}
-
-function downloadLogs(){
-    db.ref("logs").once("value", snap=>{
-        const data = JSON.stringify(snap.val(),null,2);
-        const blob = new Blob([data], {type:"application/json"});
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "logs.json";
-        a.click();
-    });
-}
-
-// show chat by default
-document.getElementById("chat").style.display="block";
-</script>
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            setupCanvas();
+        });
+    </script>
 </body>
 </html>
